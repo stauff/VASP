@@ -44,7 +44,7 @@ def parse_poscar_header(inp_fh):
     poscar_header += atom_labels
     poscar_header += " ".join(str(x) for x in atom_numbers)+"\n"
     #
-    return nat, vol, poscar_header
+    return nat, vol, b, poscar_header
 #
 def parse_env_params(params):
     import sys
@@ -131,6 +131,7 @@ if __name__ == '__main__':
     import time
     #import argparse
     import optparse
+    import DMFDM
     #
     print ""
     print "    Raman off-resonant activity calculator,"
@@ -186,18 +187,45 @@ if __name__ == '__main__':
         print "[__main__]: ERROR Couldn't open input file POSCAR.phon, exiting...\n"
         sys.exit(1)
     #
-    nat, vol, poscar_header = parse_poscar_header(poscar_fh)
+    nat, vol, b, poscar_header = parse_poscar_header(poscar_fh)
+#### IF FD-DM calculation:  get pos from POSCAR --> convert to CART if nec ##
+#### NEEDED BEFORE CLOSING POSCAR
+    if os.path.isfile('freq.dat'):
+    	pos = DMFDM.parse_pos(poscar_fh, nat, b)
     poscar_fh.close()
     #
-    try:
-        outcar_fh = open('OUTCAR.phon', 'r')
-    except IOError:
-        print "[__main__]: ERROR Couldn't open OUTCAR.phon, exiting...\n"
-        sys.exit(1)
+#### OPEN freq.dat and modes_sqrt_amu.dat to read eigvals, eigvecs, norms
+    if os.path.isfile('freq.dat'):
+    	try:
+            inp_eval = open('freq.dat', 'r')          
+        except IOError:
+            print "[__main__]: ERROR Couldn't open freq.dat,  exiting...\n"
+            sys.exit(1)
+        eigvals = DMFDM.parse_eval(inp_eval, nat)
+        inp_eval.close()
+
+        try: 
+            inp_evec = open('modes_sqrt_amu.dat' , 'r')
+        except IOError:
+            print "[__main__]: ERROR Couldn't open modes_sqrt_amu.dat,  exiting...\n"
+            sys.exit(1)
+        eigvecs, norms = DMFDM.parse_evec(inp_evec, nat)
+
+
+#### OPEN OUTCAR.PHON from VASP PHONON CALC
+
+    if os.path.isfile('OUTCAR.phon'):
+        try:
+            outcar_fh = open('OUTCAR.phon', 'r')
+        except IOError:
+            print "[__main__]: ERROR Couldn't open OUTCAR.phon, exiting...\n"
+            sys.exit(1)
     #
-    pos, eigvals, eigvecs, norms = get_modes_from_OUTCAR(outcar_fh, nat)
-    outcar_fh.close()
+        pos, eigvals, eigvecs, norms = get_modes_from_OUTCAR(outcar_fh, nat)
+        outcar_fh.close()
     #
+
+
     output_fh = open('vasp_raman.dat', 'w')
     output_fh.write("# mode    freq(cm-1)    alpha    beta2    activity\n")
     for i in range(first-1, last):
